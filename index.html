@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Advice Study</title>
+<style>
+  :root { --bg:#f6f6f3; --card:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#d9d9d2; --accent:#2f5d8a; --ai:#eef3f8; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width:760px; margin:40px auto; padding:0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:28px; }
+  h1 { font-size:1.4rem; margin:0 0 12px; } h2 { font-size:1.15rem; margin:0 0 12px; }
+  .muted { color:var(--muted); font-size:.9rem; }
+  button { font:inherit; padding:12px 22px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button.opt { background:#fff; color:var(--ink); border-color:var(--line); width:100%; text-align:left; margin:6px 0; }
+  @media (hover:hover) { button.opt:hover { border-color:var(--accent); } }  /* no sticky hover on touch screens */
+  button, label, .tlx button { touch-action:manipulation; -webkit-tap-highlight-color:transparent; }  /* no double-tap zoom on iOS */
+  input, select { font-size:16px; }  /* >=16px stops iOS zooming into fields */
+  button:disabled { opacity:.4; cursor:default; }
+  label { display:block; margin:12px 0 4px; font-weight:600; }
+  input[type=text], select { font:inherit; padding:8px; width:100%; border:1px solid var(--line); border-radius:6px; }
+  .ai { background:var(--ai); border-left:4px solid var(--accent); padding:14px 16px; border-radius:6px; margin:16px 0; }
+  .ai b { color:var(--accent); }
+  .q { font-size:1.2rem; font-weight:600; margin:10px 0 14px; }
+  .likert { display:flex; gap:4px; justify-content:space-between; margin:6px 0 16px; }
+  .likert label { font-weight:400; text-align:center; flex:1; font-size:.8rem; margin:0; }
+  .row { margin:14px 0; }
+  .tlx { display:flex; height:34px; margin:6px 0 2px; }
+  .tlx button { flex:1; min-width:0; padding:0; border-radius:0; border:1px solid var(--line); border-left:none; background:#fff; }
+  .tlx button:first-child { border-left:1px solid var(--line); }
+  .tlx button:nth-child(11) { border-left:2px solid var(--muted); }
+  .tlx button.sel { background:var(--accent); border-color:var(--accent); }
+  @media (max-width:480px) {
+    main { margin:12px auto; padding:0 8px; }
+    .card { padding:18px 14px; }
+    .tlx { height:48px; }
+    .likert label { padding:6px 0; }
+  }
+  .sv { font-size:.85rem; font-weight:600; color:#a12a2a; }
+  .sv.ok { color:var(--accent); }
+  .ends { display:flex; justify-content:space-between; font-size:.8rem; color:var(--muted); }
+  .progress { font-size:.85rem; color:var(--muted); margin-bottom:8px; }
+</style>
+</head>
+<body>
+<main><div class="card" id="app"></div></main>
+<script>
+/* ===================== ONLINE SETTINGS =====================
+   Paste the Google Apps Script Web App URL between the quotes (see SETUP.md). */
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbwZwIst6gTutSutpXvofOpwfZTgDUUUNggrJzbMDHBFFSyZbytYEsEl1au0UixAZAeM/exec";
+// Contact shown in the debrief so online participants can withdraw (fill in before sharing the link).
+const CONTACT = "u3645125@connect.hku.hk";
+
+/* ===================== STIMULI =====================
+   4 fixed item sets of 8. Set 1 = baseline (no AI). Sets 2-4 = AI blocks.
+   Set position is fixed; the AI CONDITION applied to sets 2-4 is rotated by a 3x3 Latin square.
+   ai: the option the AI recommends. wrong:true = AI advice is incorrect (3 per AI set = 37.5%).
+   conf: confidence shown in condition B. why: explanation shown in condition C. */
+const SETS = [
+ [ // Set 1 - baseline
+  {id:'S1_01', q:'Which planet is larger?', a:'Saturn', b:'Neptune', ans:'a'},
+  {id:'S1_02', q:'Which ocean is larger?', a:'Indian Ocean', b:'Atlantic Ocean', ans:'b'},
+  {id:'S1_03', q:'Which country has the larger population?', a:'Indonesia', b:'Brazil', ans:'a'},
+  {id:'S1_04', q:'Which planet has the hotter average surface temperature?', a:'Mercury', b:'Venus', ans:'b'},
+  {id:'S1_05', q:"Which gas makes up more of Earth's atmosphere?", a:'Nitrogen', b:'Oxygen', ans:'a'},
+  {id:'S1_06', q:'Which language has more native speakers?', a:'English', b:'Spanish', ans:'b'},
+  {id:'S1_09', q:'Which continent has more countries?', a:'Asia', b:'Africa', ans:'b'},
+  {id:'S1_10', q:'Which city is closer to Hong Kong?', a:'Manila', b:'Tokyo', ans:'a'},
+ ],
+ [ // Set 2
+  {id:'S2_01', q:'Which mountain is taller?', a:'Mont Blanc', b:'Kilimanjaro', ans:'b', ai:'b', conf:91, why:'Kilimanjaro rises to about 5,900 m, while Mont Blanc is about 4,800 m.'},
+  {id:'S2_02', q:'Which country has the larger land area?', a:'Canada', b:'China', ans:'a', ai:'a', conf:84, why:'Canada covers about 10.0 million km², slightly more than China at about 9.6 million km².'},
+  {id:'S2_03', q:'Which city is farther north?', a:'New York', b:'Rome', ans:'b', ai:'a', wrong:true, conf:86, why:"New York's colder winters reflect its more northerly latitude compared with Mediterranean Rome."},
+  {id:'S2_04', q:'Which metal is denser?', a:'Lead', b:'Gold', ans:'b', ai:'b', conf:88, why:'Gold has a density of about 19.3 g/cm³, compared with about 11.3 g/cm³ for lead.'},
+  {id:'S2_05', q:'Which animal typically lives longer?', a:'Horse', b:'Cat', ans:'a', ai:'a', conf:90, why:'Horses commonly live 25–30 years; domestic cats usually live 12–18 years.'},
+  {id:'S2_06', q:'Which is larger in area?', a:'Greenland', b:'Mexico', ans:'a', ai:'b', wrong:true, conf:81, why:'Greenland only looks huge because map projections stretch areas near the poles; Mexico is actually larger.'},
+  {id:'S2_09', q:'Which university is older?', a:'Harvard', b:'Oxford', ans:'b', ai:'b', conf:89, why:'Teaching at Oxford dates to the 1090s; Harvard was founded in 1636.'},
+  {id:'S2_10', q:'Which was completed first?', a:'Statue of Liberty', b:'Eiffel Tower', ans:'a', ai:'b', wrong:true, conf:78, why:'The Eiffel Tower was finished for the 1889 World Fair, before the Statue of Liberty was assembled in New York.'},
+ ],
+ [ // Set 3
+  {id:'S3_01', q:'Which was invented first?', a:'Telephone', b:'Fax machine', ans:'b', ai:'a', wrong:true, conf:87, why:'Fax machines send images over telephone lines, so they had to come after the telephone.'},
+  {id:'S3_02', q:"Which element is more abundant in Earth's crust?", a:'Aluminium', b:'Iron', ans:'a', ai:'a', conf:80, why:'Aluminium makes up about 8% of the crust by mass, iron about 5%.'},
+  {id:'S3_03', q:'Which lake has the larger surface area?', a:'Lake Victoria', b:'Lake Superior', ans:'b', ai:'b', conf:83, why:'Lake Superior covers about 82,000 km², Lake Victoria about 69,000 km².'},
+  {id:'S3_04', q:'Which country has the larger population?', a:'Nigeria', b:'Russia', ans:'a', ai:'a', conf:85, why:'Nigeria has over 220 million people; Russia has about 145 million.'},
+  {id:'S3_05', q:'Which metal has the higher melting point?', a:'Copper', b:'Iron', ans:'b', ai:'b', conf:88, why:'Iron melts at about 1,538 °C, copper at about 1,085 °C.'},
+  {id:'S3_06', q:'Which has the larger land area?', a:'Hong Kong', b:'Singapore', ans:'a', ai:'b', wrong:true, conf:79, why:'Decades of land reclamation have made Singapore larger than Hong Kong.'},
+  {id:'S3_09', q:'Which country has the longer coastline?', a:'Norway', b:'Canada', ans:'b', ai:'a', wrong:true, conf:82, why:"Norway's deep fjords give it the longest coastline of any country."},
+  {id:'S3_10', q:'Which university is older?', a:'Peking University', b:'University of Hong Kong', ans:'a', ai:'a', conf:86, why:'Peking University was founded in 1898; HKU in 1911.'},
+ ],
+ [ // Set 4
+  {id:'S4_01', q:'Which is older?', a:'Great Pyramid of Giza', b:'Stonehenge (first stage)', ans:'b', ai:'a', wrong:true, conf:85, why:'The Great Pyramid comes from the earliest age of monumental building, before Stonehenge was begun.'},
+  {id:'S4_02', q:'Which city is farther north?', a:'London', b:'Calgary', ans:'a', ai:'a', conf:77, why:'London is at about 51.5° N, slightly north of Calgary at about 51.0° N.'},
+  {id:'S4_03', q:'Which is longer?', a:"The Moon's diameter", b:"Australia's east–west width", ans:'b', ai:'a', wrong:true, conf:80, why:"The Moon's diameter is far larger than any single continent on Earth."},
+  {id:'S4_04', q:'Which city is farther south?', a:'Sydney', b:'Cape Town', ans:'b', ai:'b', conf:76, why:'Cape Town is at about 33.9° S, just south of Sydney at about 33.87° S.'},
+  {id:'S4_05', q:'Which country has the larger land area?', a:'Australia', b:'Brazil', ans:'b', ai:'b', conf:84, why:'Brazil covers about 8.5 million km², Australia about 7.7 million km².'},
+  {id:'S4_08', q:'Which country uses more time zones (including overseas territories)?', a:'Russia', b:'France', ans:'b', ai:'a', wrong:true, conf:88, why:'Russia stretches across 11 time zones, more than any other country.'},
+  {id:'S4_09', q:'Which came first?', a:'The first photograph', b:'The first bicycle (draisine)', ans:'b', ai:'b', conf:74, why:'The draisine was built in 1817; the first surviving photograph dates from 1826–27.'},
+  {id:'S4_10', q:'Which is heavier?', a:'1 litre of water', b:'1 litre of olive oil', ans:'a', ai:'a', conf:92, why:'Olive oil floats on water because it is less dense, so a litre of water weighs more.'},
+ ],
+];
+const COND_LABEL = {A:'AI answer only', B:'AI answer + confidence', C:'AI answer + explanation'};
+// 3x3 Latin square: each condition appears once in each position (lecture slide 11)
+const LATIN = [['A','B','C'],['B','C','A'],['C','A','B']];
+
+const TRUST = [ // adapted from Jian, Bisantz & Drury (2000), 7-point
+  ['trust_reliable','The AI assistant was reliable.'],
+  ['trust_trust','I could trust the AI assistant\'s advice.'],
+  ['trust_suspicious_R','I was suspicious of the AI assistant\'s advice.'],
+];
+const TLX = [ // NASA-TLX raw (unweighted), 0-100
+  ['tlx_mental','Mental demand','How mentally demanding was the task?','Very low','Very high'],
+  ['tlx_temporal','Temporal demand','How hurried or rushed was the pace of the task?','Very low','Very high'],
+  ['tlx_performance','Performance','How successful were you in accomplishing what you were asked to do?','Perfect','Failure'],
+  ['tlx_effort','Effort','How hard did you have to work to accomplish your level of performance?','Very low','Very high'],
+  ['tlx_frustration','Frustration','How insecure, discouraged, irritated, stressed, and annoyed were you?','Very low','Very high'],
+];
+
+/* ===================== STATE ===================== */
+const S = { p:{}, blocks:[], trials:[], surveys:[] };
+const app = document.getElementById('app');
+const shuffle = arr => { const a = arr.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Inline warning instead of alert(): pop-ups can be blocked or invisible in some browsers
+function warn(msg){
+  let w = document.getElementById('warn');
+  if (!w) { w = document.createElement('p'); w.id = 'warn'; w.style.cssText = 'color:#a12a2a;font-weight:600;background:#fbeaea;padding:10px 12px;border-radius:6px';
+    const btn = document.getElementById('go'); (btn ? btn.parentNode : app).insertBefore(w, btn || null); }
+  w.textContent = msg; w.scrollIntoView({block:'center'});
+}
+function backup(){ try { localStorage.setItem('aistudy_'+S.p.pid, JSON.stringify(S)); } catch(e){} }
+
+/* ===================== SCREENS ===================== */
+function setup(){
+  // Online: random anonymous ID and a random Latin-square row (roughly balanced over many participants)
+  const pid = 'W' + Date.now().toString(36).slice(-4).toUpperCase() + Math.random().toString(36).slice(2,5).toUpperCase();
+  const row = Math.floor(Math.random()*3);
+  S.p = { pid, experimenter:'online', latin_row:row, order:LATIN[row].join(''), start:new Date().toISOString(), device: /Mobi|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop' };
+  S.blocks = [{set:0, cond:'none'}, ...LATIN[row].map((c,i)=>({set:i+1, cond:c}))];
+  app.innerHTML = `<h1>Quick judgement study</h1>
+  <p>Thank you for your interest! This takes about <b>10 minutes</b>. Please do it in one go, somewhere quiet, and <b>do not look anything up</b>.</p>
+  <p class="muted">A computer or tablet is best, but a phone works too.</p>
+  <button id="go">Start</button>`;
+  document.getElementById('go').onclick = consent;
+}
+
+function consent(){
+  app.innerHTML = `<h1>Participant information and consent</h1>
+  <p>You are invited to take part in a study for the course DASE3128 Human–Machine Collaboration at The University of Hong Kong. The study looks at how people make quick judgements, sometimes with help from an AI assistant.</p>
+  <p>You will answer 32 short two-choice questions and a few short questionnaires. It takes about 10 minutes. There are no known risks. Your answers are recorded under a participant number only, are used only for this course project, and will be deleted after the course ends.</p>
+  <p>Taking part is voluntary. You may stop at any time without giving a reason.</p>
+  <label style="font-weight:400"><input type="checkbox" id="ok"> I have read the information above, I am 18 or older and a current university student, and I agree to take part.</label>
+  <p><button id="go" disabled>Continue</button></p>`;
+  const ok = document.getElementById('ok'), go = document.getElementById('go');
+  ok.onchange = () => go.disabled = !ok.checked;
+  go.onclick = demographics;
+}
+
+function demographics(){
+  app.innerHTML = `<h1>About you</h1>
+  <label>Age (years)</label><input type="text" id="age" inputmode="numeric" pattern="[0-9]*">
+  <label>Gender</label><select id="gender"><option value="">–</option><option>Female</option><option>Male</option><option>Other / prefer not to say</option></select>
+  <label>Are you currently a university student?</label>
+  <select id="student"><option value="">–</option><option value="yes">Yes</option><option value="no">No</option></select>
+  <label>Field of study</label>
+  <select id="major"><option value="">–</option><option value="STEM">Science / engineering / IT / medicine</option><option value="non-STEM">Business / arts / social science / law / other</option></select>
+  <label>Year of study</label>
+  <select id="year"><option value="">–</option><option>1</option><option>2</option><option>3</option><option>4</option><option value="5+">5 or above / postgraduate</option></select>
+  <label>How often do you use AI tools such as ChatGPT?</label>
+  <select id="ai_use"><option value="">–</option><option value="0">Never</option><option value="1">Less than monthly</option><option value="2">Monthly</option><option value="3">Weekly</option><option value="4">Daily</option></select>
+  <p><button id="go">Continue</button></p>`;
+  document.getElementById('go').onclick = () => {
+    const v = id => document.getElementById(id).value.trim();
+    const age = v('age'), gender = v('gender'), student = v('student'), major = v('major'), year = v('year'), ai_use = v('ai_use');
+    if (!/^\d+$/.test(age) || !gender || !student || !major || !year || ai_use==='') { warn('Please answer all questions.'); return; }
+    if (+age < 18) { warn('Sorry, participants must be 18 or older.'); return; }
+    if (student !== 'yes') { warn('Sorry, this study is only for current university students.'); return; }
+    const ai_group = +ai_use >= 3 ? 'frequent' : 'infrequent';  // weekly/daily vs less often (secondary between-subjects factor)
+    Object.assign(S.p, {age:+age, gender, major, year, ai_use:+ai_use, ai_group});
+    instructions();
+  };
+}
+
+function instructions(){
+  app.innerHTML = `<h1>Instructions</h1>
+  <p>Each question has two answers. Pick the one you think is correct. Try to be accurate, but don't spend too long on any one question.</p>
+  <p>In some parts, an <b>AI assistant</b> will suggest an answer. You can follow its suggestion or choose differently. The choice is always yours.</p>
+  <p>You will not be told whether your answers are correct.</p>
+  <p>First, one practice question.</p>
+  <button id="go">Start practice</button>`;
+  document.getElementById('go').onclick = () => practice(0);
+}
+
+const PRACTICE = [
+  {q:'Which city is in Japan?', a:'Osaka', b:'Seoul', ai:'a'},
+];
+function practice(i){
+  if (i >= PRACTICE.length) {
+    app.innerHTML = `<h1>Practice complete</h1><p>The real questions start now. There are four parts with a short questionnaire after each.</p><button id="go">Begin</button>`;
+    document.getElementById('go').onclick = () => runBlock(0); return;
+  }
+  const it = PRACTICE[i];
+  app.innerHTML = `<div class="progress">Practice ${i+1} of ${PRACTICE.length}</div>
+   <div class="q">${esc(it.q)}</div>
+   ${it.ai ? `<div class="ai"><b>AI assistant suggests:</b> ${esc(it[it.ai])}</div>` : ''}
+   <button class="opt" id="oa">${esc(it.a)}</button><button class="opt" id="ob">${esc(it.b)}</button>`;
+  const shown = performance.now();
+  document.getElementById('oa').onclick = document.getElementById('ob').onclick = () => { if (performance.now() - shown >= 400) practice(i+1); };
+}
+
+function runBlock(bi){
+  if (bi >= S.blocks.length) return finish();
+  const blk = S.blocks[bi];
+  const intro = blk.cond==='none'
+    ? 'In this part you will answer on your own, without the AI assistant.'
+    : 'In this part an AI assistant will suggest an answer to each question.' +
+      (blk.cond==='B' ? ' It will also show how confident it is.' : blk.cond==='C' ? ' It will also explain its reasoning.' : '');
+  app.innerHTML = `<div class="progress">Part ${bi+1} of ${S.blocks.length}</div><h2>${intro}</h2><button id="go">Start part ${bi+1}</button>`;
+  document.getElementById('go').onclick = () => {
+    const items = shuffle(SETS[blk.set]);
+    trial(bi, items, 0);
+  };
+}
+
+function trial(bi, items, k){
+  if (k >= items.length) return survey(bi);
+  const blk = S.blocks[bi], it = items[k];
+  let adv = '';
+  if (blk.cond !== 'none') {
+    adv = `<div class="ai"><b>AI assistant suggests:</b> ${esc(it[it.ai])}`;
+    if (blk.cond==='B') adv += `<br><span class="muted">AI confidence: ${it.conf}%</span>`;
+    if (blk.cond==='C') adv += `<br><span class="muted">Reason: ${esc(it.why)}</span>`;
+    adv += `</div>`;
+  }
+  // randomise left/right position of options to avoid position bias
+  const flip = Math.random() < .5;
+  const order = flip ? ['b','a'] : ['a','b'];
+  app.innerHTML = `<div class="progress">Part ${bi+1} of ${S.blocks.length} · Question ${k+1} of ${items.length}</div>
+    <div class="q">${esc(it.q)}</div>${adv}
+    ${order.map(o=>`<button class="opt" data-o="${o}">${esc(it[o])}</button>`).join('')}`;
+  const t0 = performance.now();
+  app.querySelectorAll('.opt').forEach(btn => btn.onclick = () => {
+    if (performance.now() - t0 < 400) return;  // ignore double-clicks carried over from the previous screen
+    const resp = btn.dataset.o, rt = Math.round(performance.now()-t0);
+    const hasAI = blk.cond !== 'none';
+    S.trials.push({
+      pid:S.p.pid, ai_group:S.p.ai_group, age:S.p.age, gender:S.p.gender, major:S.p.major, year:S.p.year, ai_use:S.p.ai_use, order:S.p.order,
+      block_pos:bi, item_set:blk.set+1, condition:blk.cond, trial_in_block:k+1, item_id:it.id,
+      correct_answer:it[it.ans], response:it[resp], correct: resp===it.ans ? 1 : 0,
+      ai_advice: hasAI ? it[it.ai] : '', ai_wrong: hasAI ? (it.wrong?1:0) : '',
+      followed_ai: hasAI ? (resp===it.ai?1:0) : '', options_flipped: flip?1:0, rt_ms: rt,
+    });
+    backup();
+    trial(bi, items, k+1);
+  });
+}
+
+function survey(bi){
+  const blk = S.blocks[bi], hasAI = blk.cond !== 'none';
+  let h = `<div class="progress">Part ${bi+1} of ${S.blocks.length} · Questionnaire</div>`;
+  if (hasAI) {
+    h += `<h2>About the AI assistant in this part</h2><p class="muted">1 = strongly disagree, 7 = strongly agree</p>`;
+    TRUST.forEach(([k,txt]) => {
+      h += `<div class="row">${esc(txt)}<div class="likert">${[1,2,3,4,5,6,7].map(v=>`<label><input type="radio" name="${k}" value="${v}"><br>${v}</label>`).join('')}</div></div>`;
+    });
+  }
+  h += `<h2>About the task in this part</h2><p class="muted">Click the box on each scale that matches your experience. Read the labels under each scale: for <b>Performance</b>, left means <b>perfect</b>.</p>`;
+  TLX.forEach(([k,name,txt,lo,hi]) => {
+    h += `<div class="row"><b>${name}</b> – ${esc(txt)} <span class="sv" id="${k}_v">(not answered yet)</span><div class="tlx" id="${k}" data-value="">${Array.from({length:21},(_,i)=>`<button type="button" data-v="${i*5}" aria-label="${i*5}"></button>`).join('')}</div><div class="ends"><span>${lo}</span><span>${hi}</span></div></div>`;
+  });
+  h += `<button id="go">Continue</button>`;
+  app.innerHTML = h;
+  // 21-point clickable scale (0-100 in steps of 5), like the paper NASA-TLX form
+  TLX.forEach(([k]) => { const el = document.getElementById(k), v = document.getElementById(k+'_v');
+    el.querySelectorAll('button').forEach(b => b.onclick = () => {
+      el.dataset.value = b.dataset.v;
+      el.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
+      v.textContent = '✓ ' + b.dataset.v + ' / 100'; v.classList.add('ok');
+    }); });
+  document.getElementById('go').onclick = () => {
+    const row = { pid:S.p.pid, ai_group:S.p.ai_group, order:S.p.order, block_pos:bi, item_set:blk.set+1, condition:blk.cond };
+    if (hasAI) for (const [k] of TRUST) {
+      const sel = app.querySelector(`input[name="${k}"]:checked`);
+      if (!sel) { warn('Please answer all statements.'); return; }
+      row[k] = +sel.value;
+    }
+    for (const [k] of TLX) {
+      const el = document.getElementById(k);
+      if (el.dataset.value === '') { warn('Please click a box on every scale.'); return; }
+      row[k] = +el.dataset.value;
+    }
+    S.surveys.push(row); backup();
+    runBlock(bi+1);
+  };
+}
+
+function toCSV(rows){
+  if (!rows.length) return '';
+  const cols = Object.keys(rows.reduce((a,r)=>Object.assign(a,r),{}));
+  const q = v => { v = v===undefined ? '' : String(v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  return [cols.join(','), ...rows.map(r=>cols.map(c=>q(r[c])).join(','))].join('\n');
+}
+function download(name, text){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text],{type:'text/csv'})); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+function finish(){
+  S.p.end = new Date().toISOString(); backup();
+  // Score shown only now, after all data is recorded, so it cannot influence any answers
+  const nCorrect = S.trials.filter(t => t.correct === 1).length;
+  const wrongAI = S.trials.filter(t => t.ai_wrong === 1), caught = wrongAI.filter(t => t.followed_ai === 0).length;
+  app.innerHTML = `<h1>Thank you!</h1>
+  <div class="ai"><b>Your result:</b> you answered <b>${nCorrect} of ${S.trials.length}</b> questions correctly.<br>
+  When the AI was wrong, you caught its mistake <b>${caught} out of ${wrongAI.length}</b> times.</div>
+  <h2>Debrief</h2>
+  <p>This study examined whether people rely too much on AI advice, and whether showing the AI's confidence or its reasoning changes this.</p>
+  <p><b>Important:</b> in 3 out of every 8 questions with the AI assistant, its suggestion was <b>deliberately wrong</b>, including some of its stated reasons and figures. This was needed to measure over-reliance. Please do not remember those answers as facts. Click <b>Show correct answers</b> below to see them.</p>
+  <p>If you no longer wish your data to be used, email ${esc(CONTACT)} with your participant ID <b>${S.p.pid}</b> and it will be deleted.</p>
+  <p>Please do not tell future participants that some AI answers are wrong until the study has finished.</p>
+  <p id="status" class="muted">Saving your answers…</p>
+  <button id="ans" style="background:#fff;color:var(--ink);border-color:var(--line)">Show correct answers</button><div id="key"></div>
+  <p><button id="dl" style="display:none">Download my answers instead</button></p>`;
+  const status = document.getElementById('status'), dl = document.getElementById('dl');
+  dl.onclick = () => {
+    download(`${S.p.pid}_trials.csv`, toCSV(S.trials));
+    setTimeout(()=>download(`${S.p.pid}_survey.csv`, toCSV(S.surveys)), 400);
+  };
+  // Send to Google Sheet. text/plain + no-cors avoids the CORS preflight Apps Script cannot answer.
+  if (!SHEET_URL) { status.textContent = 'Not connected to a data sheet (test mode).'; dl.style.display=''; }
+  else fetch(SHEET_URL, { method:'POST', mode:'no-cors', keepalive:true, headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ participant:S.p, trials:S.trials, survey:S.surveys }) })
+    .then(() => { status.textContent = '✓ Your answers have been saved. You can close this page.'; })
+    .catch(() => { status.textContent = 'Saving failed (no internet?). Please click below and send the two files to the research team.'; dl.style.display=''; });
+  document.getElementById('ans').onclick = () => {
+    document.getElementById('key').innerHTML = '<ul>' + SETS.slice(1).flat().filter(i=>i.wrong).map(i=>`<li>${esc(i.q)} <b>${esc(i[i.ans])}</b></li>`).join('') + '</ul>';
+  };
+}
+
+setup();
+</script>
+</body>
+</html>
