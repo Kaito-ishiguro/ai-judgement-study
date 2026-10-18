@@ -243,9 +243,19 @@ function recall(t, practice, start, cbText){
     const typed = inp.value.toUpperCase().replace(/\s+/g, "");
     if (practice) { pagePracticeDone(t.code, typed); return; }
     const d = lev(typed, t.code);
+    // Split score: the 3-letter block (positions 2-4) vs the other 4 characters.
+    // block_recalled = the exact block appears anywhere in the answer (so a missed first digit doesn't hide it);
+    // block_chars = letters of the block typed correctly in place (0-3), compared against the 3 characters after the first digit;
+    // rest_chars = the other 4 characters, scored on the answer with the block removed (0-4).
+    const blk = t.block, hasBlk = blk && typed.includes(blk);
+    const rest = t.code.slice(0,1) + t.code.slice(4);
+    const typedRest = hasBlk ? typed.replace(blk, "") : (typed.slice(0,1) + typed.slice(4));
+    const blockChars = blk ? (hasBlk ? 3 : Math.max(0, 3 - lev(typed.slice(1,4), blk))) : "";
     S.trials.push({ pid:S.p.pid, study:STUDY, trial:S.i+1, type:t.type, block:t.block, frame_set:t.frame_set, frame_id:t.frame_id,
       latin_row:S.p.latin_row, group:S.p.group, code:t.code, typed, exact: typed===t.code ? 1 : 0,
-      edit_distance:d, chars_recalled: Math.max(0, t.code.length - d), rt_ms:rt, timed_out: timedOut === true ? 1 : 0,
+      edit_distance:d, chars_recalled: Math.max(0, t.code.length - d),
+      block_recalled: blk ? (hasBlk ? 1 : 0) : "", block_chars: blockChars,
+      rest_chars: blk ? Math.max(0, rest.length - lev(typedRest, rest)) : "", rt_ms:rt, timed_out: timedOut === true ? 1 : 0,
       distractor_start:start, distractor_typed:cbText });
     backup();
     S.i++;
