@@ -53,6 +53,7 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbwZwIst6gTutSutpXvofO
 const STUDY = "codes_v1";
 const SHOW_MS = 3500;      // code display time
 const DISTRACT_MS = 4000;  // count-backwards time
+const ANSWER_MS = 7000;    // hidden time limit on the login box; whatever is typed is submitted when it runs out
 const FEEDBACK_MS = 500;   // correct / not-correct message after each answer
 const GAP_MS = 1000;       // progress screen before the next code appears
 const MILESTONE_MS = 3000; // progress screen when it shows an encouragement message
@@ -173,7 +174,7 @@ function pageInstructions(){
   <ol>
     <li>A code appears on a phone screen for <b>3.5 seconds</b>. Remember it.</li>
     <li>Then <b>count backwards by 3</b> from the number shown, typing as you go (e.g. 847, 844, 841…), for 4 seconds.</li>
-    <li>Then <b>type the code</b> into the login box and press Enter.</li>
+    <li>Then <b>type the code</b> into the login box and press Enter. You have a few seconds; if time runs out, whatever you have typed is submitted automatically.</li>
   </ol>
   <p>Codes are hard to remember; that's expected. Just do your best and don't write anything down. If you can't remember part of it, type what you can.</p>
   <p>First, one practice code.</p>
@@ -235,21 +236,24 @@ function recall(t, practice, start, cbText){
   const inp = document.getElementById("code"), t0 = performance.now();
   inp.focus();
   inp.addEventListener("paste", e => e.preventDefault());
-  const submit = () => {
+  let done = false;
+  const submit = (timedOut) => {
+    if (done) return; done = true; clearTimeout(limit);
     const rt = Math.round(performance.now() - t0);
     const typed = inp.value.toUpperCase().replace(/\s+/g, "");
     if (practice) { pagePracticeDone(t.code, typed); return; }
     const d = lev(typed, t.code);
     S.trials.push({ pid:S.p.pid, study:STUDY, trial:S.i+1, type:t.type, block:t.block, frame_set:t.frame_set, frame_id:t.frame_id,
       latin_row:S.p.latin_row, group:S.p.group, code:t.code, typed, exact: typed===t.code ? 1 : 0,
-      edit_distance:d, chars_recalled: Math.max(0, t.code.length - d), rt_ms:rt,
+      edit_distance:d, chars_recalled: Math.max(0, t.code.length - d), rt_ms:rt, timed_out: timedOut === true ? 1 : 0,
       distractor_start:start, distractor_typed:cbText });
     backup();
     S.i++;
     pageFeedback(typed === t.code, S.i < S.seq.length ? pageReady : pageFamiliarity);
   };
-  document.getElementById("sub").onclick = submit;
-  inp.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+  const limit = setTimeout(() => submit(true), ANSWER_MS);  // no visible countdown, so nobody feels rushed
+  document.getElementById("sub").onclick = () => submit(false);
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") submit(false); });
 }
 
 function pagePracticeDone(code, typed){
