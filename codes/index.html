@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verification Code Study</title>
+<style>
+  :root { --bg:#f6f6f3; --card:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#d9d9d2; --accent:#2f5d8a; --phone:#1f2328; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width:760px; margin:40px auto; padding:0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:28px; min-height:340px; }
+  h1 { font-size:1.4rem; margin:0 0 12px; } h2 { font-size:1.15rem; margin:0 0 12px; }
+  .muted { color:var(--muted); font-size:.9rem; }
+  button { font:inherit; padding:12px 22px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  button.ghost { background:#fff; color:var(--accent); }
+  label { display:block; margin:14px 0 4px; font-weight:600; }
+  label.inline { display:inline; font-weight:400; margin:0 14px 0 4px; }
+  input[type=text], input[type=number], select { font:inherit; font-size:16px; padding:8px; width:100%; border:1px solid var(--line); border-radius:6px; }
+  .progress { font-size:.85rem; color:var(--muted); margin-bottom:8px; }
+  .center { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:280px; text-align:center; }
+  /* phone-style notification */
+  .phone { width:300px; background:var(--phone); border-radius:28px; padding:18px 14px 26px; color:#fff; box-shadow:0 6px 24px rgba(0,0,0,.18); }
+  .phone .bar { font-size:.75rem; opacity:.7; display:flex; justify-content:space-between; padding:0 8px 12px; }
+  .notif { background:#fff; color:#1d1d1b; border-radius:14px; padding:12px 14px; text-align:left; }
+  .notif .app { font-size:.75rem; color:#6b6b66; display:flex; align-items:center; gap:6px; }
+  .notif .app span.ic { display:inline-block; width:16px; height:16px; border-radius:4px; background:var(--accent); }
+  .notif .msg { font-size:.9rem; margin-top:4px; }
+  .code { font:600 1.9rem/1.2 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing:.12em; margin-top:6px; user-select:none; -webkit-user-select:none; }
+  /* login box */
+  .login { width:100%; max-width:380px; border:1px solid var(--line); border-radius:10px; padding:22px; text-align:left; }
+  .login .brand { font-weight:700; color:var(--accent); margin-bottom:10px; }
+  .login input { font:600 1.4rem ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing:.12em; text-transform:uppercase; }
+  .countdown { font-size:2.2rem; font-weight:700; color:var(--accent); }
+  .fam-row { display:grid; grid-template-columns:70px 1fr auto; gap:10px; align-items:center; margin:8px 0; }
+  .fam-row b { font-family:ui-monospace, Consolas, monospace; font-size:1.1rem; }
+  .warn { color:#a12a2a; font-weight:600; }
+  .fb { font-size:1.8rem; font-weight:700; margin:0; } .fb.ok { color:#2e7d4f; } .fb.no { color:#a12a2a; }
+  .pbar { width:260px; height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin:4px 0 12px; }
+  .pbar div { height:100%; background:var(--accent); }
+  @media (max-width:480px) { main { margin:12px auto; padding:0 8px; } .card { padding:18px 14px; } .phone { width:100%; } }
+</style>
+</head>
+<body>
+<main><div class="card" id="app"></div></main>
+<script>
+/* ===================== SETTINGS =====================
+   SHEET_URL: the Google Apps Script web-app URL (see ../SETUP.md and ../apps_script.gs).
+   Open with ?test=1 to run without sending anything (shows a download button instead).
+   Open with ?row=1, ?row=2 or ?row=3 to force a Latin-square row (otherwise random). */
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbwZwIst6gTutSutpXvofOpwfZTgDUUUNggrJzbMDHBFFSyZbytYEsEl1au0UixAZAeM/exec";
+const STUDY = "codes_v1";
+const SHOW_MS = 3500;      // code display time
+const DISTRACT_MS = 4000;  // count-backwards time
+const FEEDBACK_MS = 500;   // correct / not-correct message after each answer
+const GAP_MS = 1000;       // progress screen before the next code appears
+const MILESTONE_MS = 3000; // progress screen when it shows an encouragement message
+
+/* ===================== STIMULI =====================
+   Code = digit + 3-letter BLOCK + digit + 2 more characters (7 in total), e.g. 5KFC3JQ.
+   The block is always at positions 2-4 with a digit on both sides.
+   Familiarity of every abbreviation is checked at the END of the form (not before), so participants are not tipped off. */
+const GLOBAL = ["KFC","BMW","PDF","GPS","SMS","CNN","MVP"];
+const LOCAL  = ["TVB","MPF","SSP","YMT","TSW","KMB","CWB"];
+const RANDOM = ["DHT","WHD","QDP","QFD","ZRQ","NQJ","XGW"];
+// 3 frame sets (F1-F3) of 7 frames: "first digit|digit after block|last 2 characters"
+const FRAME_SETS = [
+  ["5|3|JQ","6|9|P8","5|3|5J","9|4|J6","8|9|6V","5|8|67","8|2|C8"],
+  ["7|3|XR","4|7|T4","5|6|3Z","4|3|Z9","5|7|5F","4|3|52","5|6|8P"],
+  ["8|9|VH","4|3|F9","5|3|2Z","8|4|D5","4|5|6N","3|8|78","6|2|SJ"]
+];
+const PRACTICE_CODE = "3QVF8C6";
+// 3x3 Latin square: row -> which frame set each code type uses
+const LATIN = { 1:{R:0,G:1,L:2}, 2:{R:1,G:2,L:0}, 3:{R:2,G:0,L:1} };
+
+/* ===================== STATE ===================== */
+const qs = new URLSearchParams(location.search);
+const TEST = qs.get("test") === "1";
+const rowParam = parseInt(qs.get("row"), 10);
+const S = {
+  p: { pid: makeId(), study: STUDY, test_mode: TEST ? 1 : 0, feedback: "correct/not-correct 500ms", started: new Date().toISOString(),
+       latin_row: [1,2,3].includes(rowParam) ? rowParam : 1 + Math.floor(Math.random()*3),
+       row_forced: [1,2,3].includes(rowParam) ? 1 : 0,
+       screen_w: screen.width, screen_h: screen.height, touch: matchMedia("(pointer:coarse)").matches ? 1 : 0,
+       user_agent: navigator.userAgent },
+  trials: [], seq: [], i: 0
+};
+const app = document.getElementById("app");
+
+function makeId(){ const c="ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let s=""; for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; }
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function backup(){ try { localStorage.setItem("codestudy_"+S.p.pid, JSON.stringify(S)); } catch(e){} }
+function lev(a,b){ const d=[]; for(let i=0;i<=a.length;i++){ d[i]=[i]; } for(let j=1;j<=b.length;j++) d[0][j]=j;
+  for(let i=1;i<=a.length;i++) for(let j=1;j<=b.length;j++)
+    d[i][j]=Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return d[a.length][b.length]; }
+
+/* Build the 21 trials (7 per type) for this participant, shuffled with no more than 2 of the same type in a row,
+   plus one attention check placed somewhere in trials 8-16. */
+function buildSequence(){
+  const row = LATIN[S.p.latin_row];
+  const lists = { R:RANDOM, G:GLOBAL, L:LOCAL };
+  const items = [];
+  for (const type of ["R","G","L"]) {
+    const set = row[type], frames = FRAME_SETS[set], blocks = shuffle(lists[type]);
+    frames.forEach((f, k) => {
+      const [d1, d2, tail] = f.split("|");
+      items.push({ type, block: blocks[k], frame_set: "F"+(set+1), frame_id: "F"+(set+1)+"-"+(k+1), code: d1+blocks[k]+d2+tail });
+    });
+  }
+  let seq;
+  do { seq = shuffle(items); } while (seq.some((t,i) => i>=2 && t.type===seq[i-1].type && t.type===seq[i-2].type));
+  const at = 7 + Math.floor(Math.random()*9);
+  seq.splice(at, 0, { type:"ATT", block:"", frame_set:"", frame_id:"", code:"7777" });
+  return seq;
+}
+
+/* ===================== PAGES ===================== */
+function pageConsent(){
+  app.innerHTML = `
+  <h1>Remembering verification codes</h1>
+  <p class="muted">DASE3128 Human–Machine Collaboration · The University of Hong Kong</p>
+  <p><b>What the study is about.</b> We are studying how people remember and type the short verification codes that apps and websites send them.</p>
+  <p><b>What you will do.</b> You will see 22 short codes, one at a time, and type each one back after a short distraction task. Then you answer a few short questions. It takes about <b>8 minutes</b>. Please use a <b>laptop or desktop</b>, do it in one go, and <b>don't write anything down</b>.</p>
+  <p><b>Risks and benefits.</b> No known risks beyond everyday computer use. No direct benefit to you.</p>
+  <p><b>Confidentiality.</b> We do not ask for your name. Your answers are stored under a random ID, used only for this course project and deleted after the course ends.</p>
+  <p><b>Voluntary.</b> You may stop at any time by closing this page; nothing is saved until you finish.</p>
+  <p class="muted">Contact: Ishiguro Kaito, u3645125@connect.hku.hk</p>
+  <label><input type="checkbox" id="ok"> I am 18 or older, a current university student, and I agree to take part.</label>
+  <p><button id="go" disabled>Start</button></p>`;
+  const ok = document.getElementById("ok"), go = document.getElementById("go");
+  ok.onchange = () => go.disabled = !ok.checked;
+  go.onclick = () => { S.p.consent = 1; (S.p.touch && screen.width < 900) ? pagePhone() : pageBackground(); };
+}
+
+function pagePhone(){
+  app.innerHTML = `<h2>Please switch to a laptop or desktop</h2>
+  <p>This study measures typing, so it needs a physical keyboard. Please open the same link on a laptop or desktop computer.</p>
+  <p class="muted">If you are already on a laptop with a touch screen, you can continue.</p>
+  <p><button class="ghost" id="cont">I am on a laptop – continue</button></p>`;
+  document.getElementById("cont").onclick = () => { S.p.phone_override = 1; pageBackground(); };
+}
+
+function pageBackground(){
+  app.innerHTML = `
+  <h2>About you</h2>
+  <label>Did you attend secondary school in Hong Kong?</label>
+  <label class="inline"><input type="radio" name="hk_sec" value="yes"> Yes</label>
+  <label class="inline"><input type="radio" name="hk_sec" value="no"> No</label>
+  <label for="years">How many years have you lived in Hong Kong in total?</label>
+  <input type="number" id="years" min="0" max="80" step="0.5" placeholder="e.g. 2 or 19">
+  <label for="yos">Year of study</label>
+  <select id="yos"><option value="">Choose…</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5 or above</option><option>Postgraduate</option></select>
+  <label for="dev">What device are you using now?</label>
+  <select id="dev"><option value="">Choose…</option><option>Laptop</option><option>Desktop</option><option>Tablet</option><option>Phone</option></select>
+  <p class="warn" id="err"></p>
+  <p><button id="next">Next</button></p>`;
+  document.getElementById("next").onclick = () => {
+    const hk = document.querySelector("input[name=hk_sec]:checked");
+    const years = document.getElementById("years").value, yos = document.getElementById("yos").value, dev = document.getElementById("dev").value;
+    if (!hk || years === "" || !yos || !dev) { document.getElementById("err").textContent = "Please answer all four questions."; return; }
+    Object.assign(S.p, { hk_secondary: hk.value, group: hk.value === "yes" ? "local" : "nonlocal", years_hk: years, year_of_study: yos, device: dev });
+    pageInstructions();
+  };
+}
+
+function pageInstructions(){
+  app.innerHTML = `
+  <h2>How it works</h2>
+  <p>Imagine you are logging in and a verification code arrives on your phone.</p>
+  <ol>
+    <li>A code appears on a phone screen for <b>3.5 seconds</b>. Remember it.</li>
+    <li>Then <b>count backwards by 3</b> from the number shown, typing as you go (e.g. 847, 844, 841…), for 4 seconds.</li>
+    <li>Then <b>type the code</b> into the login box and press Enter.</li>
+  </ol>
+  <p>Codes are hard to remember; that's expected. Just do your best and don't write anything down. If you can't remember part of it, type what you can.</p>
+  <p>First, one practice code.</p>
+  <p><button id="go">Start practice</button></p>`;
+  document.getElementById("go").onclick = () => runTrial({ type:"PRACTICE", block:"", frame_set:"", frame_id:"", code: PRACTICE_CODE }, true);
+}
+
+// Codes run back to back (no self-paced break, so people don't drop out mid-way):
+// after each answer, a 0.5 s correct / not-correct message, then a short progress screen,
+// then the next code appears automatically. Two true encouragement messages at 1/3 and 2/3.
+function pageFeedback(correct, next){
+  app.innerHTML = `<div class="center">
+    <p class="fb ${correct ? "ok" : "no"}">${correct ? "✓ Correct" : "✗ Not correct"}</p></div>`;
+  setTimeout(next, FEEDBACK_MS);
+}
+
+function pageReady(){
+  const n = S.seq.length, pct = Math.round(100 * S.i / n);
+  const msg = S.i === 7 ? "A third done! These codes are designed to be hard, so getting part of a code right is normal."
+            : S.i === n - 7 ? "Two-thirds done – only 7 codes left!" : "";
+  app.innerHTML = `<div class="center">
+    <div class="progress">Code ${S.i+1} of ${n}</div>
+    <div class="pbar"><div style="width:${pct}%"></div></div>
+    <p>${msg ? `<b>${msg}</b>` : "Next code…"}</p></div>`;
+  setTimeout(() => runTrial(S.seq[S.i], false), msg ? MILESTONE_MS : GAP_MS);
+}
+
+function runTrial(t, practice){
+  // 1) phone notification
+  const isAtt = t.type === "ATT";
+  app.innerHTML = `<div class="center"><div class="phone">
+      <div class="bar"><span>9:41</span><span>●●●</span></div>
+      <div class="notif">
+        <div class="app"><span class="ic"></span> Campus Portal · now</div>
+        ${isAtt ? `<div class="msg"><b>Attention check:</b> in the login box, type</div><div class="code">7777</div>`
+                : `<div class="msg">Your verification code is:</div><div class="code">${esc(t.code)}</div>`}
+      </div></div></div>`;
+  setTimeout(() => distractor(t, practice), SHOW_MS);
+}
+
+function distractor(t, practice){
+  const start = 300 + Math.floor(Math.random()*600);
+  app.innerHTML = `<div class="center">
+    <p>Count backwards by 3 from <b style="font-size:1.4rem">${start}</b>. Type as you go:</p>
+    <input type="text" id="cb" autocomplete="off" style="max-width:380px" placeholder="${start-3}, ${start-6}, …">
+    <p class="countdown" id="cd">${DISTRACT_MS/1000}</p></div>`;
+  const cb = document.getElementById("cb"); cb.focus();
+  let left = DISTRACT_MS/1000;
+  const timer = setInterval(() => { left--; const el = document.getElementById("cd"); if (el) el.textContent = left; }, 1000);
+  setTimeout(() => { clearInterval(timer); recall(t, practice, start, cb.value); }, DISTRACT_MS);
+}
+
+function recall(t, practice, start, cbText){
+  app.innerHTML = `<div class="center"><div class="login">
+      <div class="brand">Campus Portal – Sign in</div>
+      <div class="muted">Enter the verification code sent to your phone</div>
+      <input type="text" id="code" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <p style="margin:14px 0 0"><button id="sub">Submit</button></p></div></div>`;
+  const inp = document.getElementById("code"), t0 = performance.now();
+  inp.focus();
+  inp.addEventListener("paste", e => e.preventDefault());
+  const submit = () => {
+    const rt = Math.round(performance.now() - t0);
+    const typed = inp.value.toUpperCase().replace(/\s+/g, "");
+    if (practice) { pagePracticeDone(t.code, typed); return; }
+    const d = lev(typed, t.code);
+    S.trials.push({ pid:S.p.pid, study:STUDY, trial:S.i+1, type:t.type, block:t.block, frame_set:t.frame_set, frame_id:t.frame_id,
+      latin_row:S.p.latin_row, group:S.p.group, code:t.code, typed, exact: typed===t.code ? 1 : 0,
+      edit_distance:d, chars_recalled: Math.max(0, t.code.length - d), rt_ms:rt,
+      distractor_start:start, distractor_typed:cbText });
+    backup();
+    S.i++;
+    pageFeedback(typed === t.code, S.i < S.seq.length ? pageReady : pageFamiliarity);
+  };
+  document.getElementById("sub").onclick = submit;
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+}
+
+function pagePracticeDone(code, typed){
+  app.innerHTML = `<h2>Practice done</h2>
+  <p>The code was <b style="font-family:monospace">${esc(code)}</b>; you typed <b style="font-family:monospace">${esc(typed || "(nothing)")}</b>.</p>
+  <p>In the real task you will only see whether each code was correct or not, not the right answer. There are ${S.seq.length} codes. They run straight after each other, and each new code appears automatically one second after you submit the last one. It takes about 6 minutes.</p>
+  <p><button id="go">Begin</button></p>`;
+  document.getElementById("go").onclick = pageReady;
+}
+
+function pageFamiliarity(){
+  const abbr = shuffle(GLOBAL.concat(LOCAL));
+  app.innerHTML = `<h2>Almost done</h2>
+  <p>Do you know what these abbreviations stand for? Type what you think it means, or tick "Don't know". Please don't look them up.</p>
+  ${abbr.map(a => `<div class="fam-row"><b>${a}</b>
+      <input type="text" id="fam_${a}" autocomplete="off">
+      <label class="inline"><input type="checkbox" id="dk_${a}"> Don't know</label></div>`).join("")}
+  <label>Did you write down or photograph any code during the task?</label>
+  <label class="inline"><input type="radio" name="wrote" value="no"> No</label>
+  <label class="inline"><input type="radio" name="wrote" value="yes"> Yes (that's OK, please be honest)</label>
+  <p class="warn" id="err"></p>
+  <p><button id="next">Finish</button></p>`;
+  document.getElementById("next").onclick = () => {
+    const wrote = document.querySelector("input[name=wrote]:checked");
+    const missing = abbr.filter(a => !document.getElementById("fam_"+a).value.trim() && !document.getElementById("dk_"+a).checked);
+    if (!wrote || missing.length) { document.getElementById("err").textContent = "Please answer every row (or tick Don't know) and the last question."; return; }
+    abbr.forEach(a => { S.p["fam_"+a] = document.getElementById("dk_"+a).checked ? "DONT_KNOW" : document.getElementById("fam_"+a).value.trim(); });
+    S.p.wrote_down = wrote.value;
+    finish();
+  };
+}
+
+function finish(){
+  const main = S.trials.filter(t => t.type !== "ATT");
+  const att = S.trials.find(t => t.type === "ATT");
+  Object.assign(S.p, { finished: new Date().toISOString(), attention_pass: att && att.typed === "7777" ? 1 : 0,
+    n_exact: main.filter(t => t.exact).length });
+  backup();
+  const payload = { study: STUDY, participant: S.p, trials: S.trials };
+  app.innerHTML = `<h2>Thank you!</h2>
+  <p id="status" class="muted">Saving your answers…</p>
+  <p>You typed <b>${S.p.n_exact} of ${main.length}</b> codes exactly right.</p>
+  <h2>What this study was about</h2>
+  <p>Some codes contained a familiar 3-letter abbreviation. Some were global (like KFC or BMW), some were Hong Kong-specific (like TVB, a local TV station, or SSP, Sham Shui Po), and some were random letters. We are testing whether a familiar abbreviation makes a code easier to remember, and whether that depends on whether the abbreviation is familiar <i>to you</i>. If it does, apps could design codes that are easier for their users to remember.</p>
+  <p><b>Please don't tell other students about the abbreviations until the study is finished</b>, as it would change their results.</p>
+  <p class="muted">To withdraw your data, email u3645125@connect.hku.hk with this ID: <b>${S.p.pid}</b></p>
+  <p id="dl" style="display:none"><button id="dlb" class="ghost">Download data (test mode)</button></p>`;
+  const status = document.getElementById("status");
+  if (TEST || !SHEET_URL) {
+    status.textContent = "Test mode: nothing was sent.";
+    document.getElementById("dl").style.display = "";
+    document.getElementById("dlb").onclick = () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 1)], { type:"application/json" }));
+      a.download = `codes_${S.p.pid}.json`; a.click();
+    };
+    return;
+  }
+  // text/plain + no-cors avoids the CORS preflight that Apps Script cannot answer.
+  fetch(SHEET_URL, { method:"POST", mode:"no-cors", keepalive:true, headers:{ "Content-Type":"text/plain" }, body: JSON.stringify(payload) })
+    .then(() => { status.textContent = "Your answers have been saved. You can close this page."; })
+    .catch(() => { status.textContent = "Saving failed. Please keep this page open and email u3645125@connect.hku.hk with your ID."; });
+}
+
+/* ===================== START ===================== */
+S.seq = buildSequence();
+pageConsent();
+</script>
+</body>
+</html>
