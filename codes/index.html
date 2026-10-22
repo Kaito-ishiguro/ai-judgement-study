@@ -39,7 +39,8 @@
   .fb { font-size:1.8rem; font-weight:700; margin:0; } .fb.ok { color:#2e7d4f; } .fb.no { color:#a12a2a; }
   .pbar { width:260px; height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin:4px 0 12px; }
   .pbar div { height:100%; background:var(--accent); }
-  @media (max-width:480px) { main { margin:12px auto; padding:0 8px; } .card { padding:18px 14px; } .phone { width:100%; } }
+  @media (max-width:480px) { main { margin:12px auto; padding:0 8px; } .card { padding:18px 14px; min-height:0; } .phone { width:100%; }
+    .center { justify-content:flex-start; min-height:0; padding-top:8px; } .fam-row { grid-template-columns:56px 1fr; } .fam-row label.inline { grid-column:2; margin:0; } }
 </style>
 </head>
 <body>
@@ -53,7 +54,8 @@ const SHEET_URL = "https://script.google.com/macros/s/AKfycbwZwIst6gTutSutpXvofO
 const STUDY = "codes_v1";
 const SHOW_MS = 3500;      // code display time
 const DISTRACT_MS = 4000;  // count-backwards time
-const ANSWER_MS = 7000;    // hidden time limit on the login box; whatever is typed is submitted when it runs out
+const ANSWER_MS = 7000;    // hidden time limit on the login box (no visible countdown); whatever is typed is submitted when it runs out
+const TAP_GRACE_MS = 3000; // phones: the time limit starts when the box is tapped, or after this long at the latest
 const FEEDBACK_MS = 500;   // correct / not-correct message after each answer
 const GAP_MS = 1000;       // progress screen before the next code appears
 const MILESTONE_MS = 3000; // progress screen when it shows an encouragement message
@@ -124,7 +126,7 @@ function pageConsent(){
   <h1>Remembering verification codes</h1>
   <p class="muted">DASE3128 Human–Machine Collaboration · The University of Hong Kong</p>
   <p><b>What the study is about.</b> We are studying how people remember and type the short verification codes that apps and websites send them.</p>
-  <p><b>What you will do.</b> You will see 22 short codes, one at a time, and type each one back after a short distraction task. Then you answer a few short questions. It takes about <b>8 minutes</b>. Please use a <b>laptop or desktop</b>, do it in one go, and <b>don't write anything down</b>.</p>
+  <p><b>What you will do.</b> You will see 22 short codes, one at a time, and type each one back after a short distraction task. Then you answer a few short questions. It takes about <b>8 minutes</b>. You can use a <b>phone or a laptop</b>. Please do it in one go and <b>don't write anything down</b>.</p>
   <p><b>Risks and benefits.</b> No known risks beyond everyday computer use. No direct benefit to you.</p>
   <p><b>Confidentiality.</b> We do not ask for your name. Your answers are stored under a random ID, used only for this course project and deleted after the course ends.</p>
   <p><b>Voluntary.</b> You may stop at any time by closing this page; nothing is saved until you finish.</p>
@@ -133,15 +135,7 @@ function pageConsent(){
   <p><button id="go" disabled>Start</button></p>`;
   const ok = document.getElementById("ok"), go = document.getElementById("go");
   ok.onchange = () => go.disabled = !ok.checked;
-  go.onclick = () => { S.p.consent = 1; (S.p.touch && screen.width < 900) ? pagePhone() : pageBackground(); };
-}
-
-function pagePhone(){
-  app.innerHTML = `<h2>Please switch to a laptop or desktop</h2>
-  <p>This study measures typing, so it needs a physical keyboard. Please open the same link on a laptop or desktop computer.</p>
-  <p class="muted">If you are already on a laptop with a touch screen, you can continue.</p>
-  <p><button class="ghost" id="cont">I am on a laptop – continue</button></p>`;
-  document.getElementById("cont").onclick = () => { S.p.phone_override = 1; pageBackground(); };
+  go.onclick = () => { S.p.consent = 1; pageBackground(); };
 }
 
 function pageBackground(){
@@ -174,7 +168,7 @@ function pageInstructions(){
   <ol>
     <li>A code appears on a phone screen for <b>3.5 seconds</b>. Remember it.</li>
     <li>Then <b>count backwards by 3</b> from the number shown, typing as you go (e.g. 847, 844, 841…), for 4 seconds.</li>
-    <li>Then <b>type the code</b> into the login box and press Enter. You have a few seconds; if time runs out, whatever you have typed is submitted automatically.</li>
+    <li>Then <b>type the code</b> into the login box and press Enter or Submit (on a phone, tap the box first). You have a few seconds; if time runs out, whatever you have typed is submitted automatically.</li>
   </ol>
   <p>Codes are hard to remember; that's expected. Just do your best and don't write anything down. If you can't remember part of it, type what you can.</p>
   <p>First, one practice code.</p>
@@ -219,7 +213,7 @@ function distractor(t, practice){
   const start = 300 + Math.floor(Math.random()*600);
   app.innerHTML = `<div class="center">
     <p>Count backwards by 3 from <b style="font-size:1.4rem">${start}</b>. Type as you go:</p>
-    <input type="text" id="cb" autocomplete="off" style="max-width:380px" placeholder="${start-3}, ${start-6}, …">
+    <input type="text" id="cb" inputmode="numeric" autocomplete="off" style="max-width:380px" placeholder="${start-3} ${start-6} …">
     <p class="countdown" id="cd">${DISTRACT_MS/1000}</p></div>`;
   const cb = document.getElementById("cb"); cb.focus();
   let left = DISTRACT_MS/1000;
@@ -231,14 +225,26 @@ function recall(t, practice, start, cbText){
   app.innerHTML = `<div class="center"><div class="login">
       <div class="brand">Campus Portal – Sign in</div>
       <div class="muted">Enter the verification code sent to your phone</div>
-      <input type="text" id="code" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <input type="text" id="code" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done">
+      ${S.p.touch ? '<div class="muted" id="taphint">Tap the box to type</div>' : ''}
       <p style="margin:14px 0 0"><button id="sub">Submit</button></p></div></div>`;
   const inp = document.getElementById("code"), t0 = performance.now();
-  inp.focus();
   inp.addEventListener("paste", e => e.preventDefault());
-  let done = false;
+  // Phones only open the keyboard after a tap, so the hidden time limit starts when the box is focused
+  // (immediately on a laptop), or after TAP_GRACE_MS if nobody taps.
+  let done = false, limit = null, readyMs = null;
+  const startLimit = () => {
+    if (limit !== null || done) return;
+    readyMs = Math.round(performance.now() - t0);
+    const h = document.getElementById("taphint"); if (h) h.remove();
+    limit = setTimeout(() => submit(true), ANSWER_MS);
+  };
+  inp.addEventListener("focus", startLimit);
+  inp.addEventListener("input", startLimit);  // typing also means the box is ready
+  const grace = setTimeout(startLimit, TAP_GRACE_MS);
+  inp.focus();
   const submit = (timedOut) => {
-    if (done) return; done = true; clearTimeout(limit);
+    if (done) return; done = true; clearTimeout(limit); clearTimeout(grace);
     const rt = Math.round(performance.now() - t0);
     const typed = inp.value.toUpperCase().replace(/\s+/g, "");
     if (practice) { pagePracticeDone(t.code, typed); return; }
@@ -255,13 +261,12 @@ function recall(t, practice, start, cbText){
       latin_row:S.p.latin_row, group:S.p.group, code:t.code, typed, exact: typed===t.code ? 1 : 0,
       edit_distance:d, chars_recalled: Math.max(0, t.code.length - d),
       block_recalled: blk ? (hasBlk ? 1 : 0) : "", block_chars: blockChars,
-      rest_chars: blk ? Math.max(0, rest.length - lev(typedRest, rest)) : "", rt_ms:rt, timed_out: timedOut === true ? 1 : 0,
+      rest_chars: blk ? Math.max(0, rest.length - lev(typedRest, rest)) : "", rt_ms:rt, ready_ms:readyMs, timed_out: timedOut === true ? 1 : 0,
       distractor_start:start, distractor_typed:cbText });
     backup();
     S.i++;
     pageFeedback(typed === t.code, S.i < S.seq.length ? pageReady : pageFamiliarity);
   };
-  const limit = setTimeout(() => submit(true), ANSWER_MS);  // no visible countdown, so nobody feels rushed
   document.getElementById("sub").onclick = () => submit(false);
   inp.addEventListener("keydown", e => { if (e.key === "Enter") submit(false); });
 }
