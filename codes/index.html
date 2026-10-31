@@ -33,14 +33,14 @@
   .login .brand { font-weight:700; color:var(--accent); margin-bottom:10px; }
   .login input { font:600 1.4rem ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing:.12em; text-transform:uppercase; }
   .countdown { font-size:2.2rem; font-weight:700; color:var(--accent); }
-  .fam-row { display:grid; grid-template-columns:70px 1fr auto; gap:10px; align-items:center; margin:8px 0; }
+  .fam-row { display:grid; grid-template-columns:70px 1fr; gap:10px; align-items:center; margin:8px 0; }
   .fam-row b { font-family:ui-monospace, Consolas, monospace; font-size:1.1rem; }
   .warn { color:#a12a2a; font-weight:600; }
   .fb { font-size:1.8rem; font-weight:700; margin:0; } .fb.ok { color:#2e7d4f; } .fb.no { color:#a12a2a; }
   .pbar { width:260px; height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin:4px 0 12px; }
   .pbar div { height:100%; background:var(--accent); }
   @media (max-width:480px) { main { margin:12px auto; padding:0 8px; } .card { padding:18px 14px; min-height:0; } .phone { width:100%; }
-    .center { justify-content:flex-start; min-height:0; padding-top:8px; } .fam-row { grid-template-columns:56px 1fr; } .fam-row label.inline { grid-column:2; margin:0; } }
+    .center { justify-content:flex-start; min-height:0; padding-top:8px; } .fam-row { grid-template-columns:56px 1fr; } }
 </style>
 </head>
 <body>
@@ -282,10 +282,10 @@ function pagePracticeDone(code, typed){
 function pageFamiliarity(){
   const abbr = shuffle(GLOBAL.concat(LOCAL));
   app.innerHTML = `<h2>Almost done</h2>
-  <p>Do you know what these abbreviations stand for? Type what you think it means, or tick "Don't know". Please don't look them up.</p>
+  <p>Do you know these abbreviations? Choose <b>Know</b> if you know what it refers to, even if you don't know what each letter stands for (for example, knowing KFC is a fried-chicken restaurant counts as Know). Please don't look them up.</p>
   ${abbr.map(a => `<div class="fam-row"><b>${a}</b>
-      <input type="text" id="fam_${a}" autocomplete="off">
-      <label class="inline"><input type="checkbox" id="dk_${a}"> Don't know</label></div>`).join("")}
+      <span><label class="inline"><input type="radio" name="fam_${a}" value="KNOW"> Know</label>
+      <label class="inline"><input type="radio" name="fam_${a}" value="DONT_KNOW"> Don't know</label></span></div>`).join("")}
   <label>Did you write down or photograph any code during the task?</label>
   <label class="inline"><input type="radio" name="wrote" value="no"> No</label>
   <label class="inline"><input type="radio" name="wrote" value="yes"> Yes (that's OK, please be honest)</label>
@@ -293,9 +293,9 @@ function pageFamiliarity(){
   <p><button id="next">Finish</button></p>`;
   document.getElementById("next").onclick = () => {
     const wrote = document.querySelector("input[name=wrote]:checked");
-    const missing = abbr.filter(a => !document.getElementById("fam_"+a).value.trim() && !document.getElementById("dk_"+a).checked);
-    if (!wrote || missing.length) { document.getElementById("err").textContent = "Please answer every row (or tick Don't know) and the last question."; return; }
-    abbr.forEach(a => { S.p["fam_"+a] = document.getElementById("dk_"+a).checked ? "DONT_KNOW" : document.getElementById("fam_"+a).value.trim(); });
+    const pick = a => document.querySelector(`input[name=fam_${a}]:checked`);
+    if (!wrote || abbr.some(a => !pick(a))) { document.getElementById("err").textContent = "Please choose Know or Don't know for every row, and answer the last question."; return; }
+    abbr.forEach(a => { S.p["fam_"+a] = pick(a).value; });
     S.p.wrote_down = wrote.value;
     finish();
   };
