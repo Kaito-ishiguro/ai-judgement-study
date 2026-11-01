@@ -73,12 +73,12 @@ const MILESTONE_MS = 3000; // progress screen when it shows an encouragement mes
    Code = digit + 3-letter BLOCK + digit + 2 more characters (7 in total), e.g. 5KFC3JQ.
    The block is always at positions 2-4 with a digit on both sides.
    Familiarity of every abbreviation is checked at the END of the form (not before), so participants are not tipped off. */
-const GLOBAL = ["KFC","BMW","PDF","GPS","SMS","CNN","MVP"];
+const GLOBAL = ["KFC","BBC","PDF","DVD","BTS","NYC","VPN"];
 const LOCAL  = ["TVB","MPF","SSP","YMT","TSW","KMB","CWB"];
 const RANDOM = ["DHT","WHD","QDP","QFD","ZRQ","NQJ","XGW"];
 // Full names, shown only on the familiarity page at the end (never during the code task)
-const FULL = { KFC:"Kentucky Fried Chicken", BMW:"Bayerische Motoren Werke (car brand)", PDF:"Portable Document Format",
-  GPS:"Global Positioning System", SMS:"Short Message Service (text message)", CNN:"Cable News Network", MVP:"Most Valuable Player",
+const FULL = { KFC:"Kentucky Fried Chicken", BBC:"British Broadcasting Corporation", PDF:"Portable Document Format",
+  DVD:"Digital Versatile Disc", BTS:"Bangtan Boys (K-pop group)", NYC:"New York City", VPN:"Virtual Private Network",
   TVB:"Television Broadcasts Limited (TV station)", MPF:"Mandatory Provident Fund", SSP:"Sham Shui Po",
   YMT:"Yau Ma Tei", TSW:"Tin Shui Wai", KMB:"Kowloon Motor Bus", CWB:"Causeway Bay" };
 // 3 frame sets (F1-F3) of 7 frames: "first digit|digit after block|last 2 characters"
@@ -331,7 +331,7 @@ function finish(){
   <p id="status" class="muted">Saving your answers…</p>
   <p>You typed <b>${S.p.n_exact} of ${main.length}</b> codes exactly right.</p>
   <h2>What this study was about</h2>
-  <p>Some codes contained a familiar 3-letter abbreviation. Some were global (like KFC or BMW), some were Hong Kong-specific (like TVB, a local TV station, or SSP, Sham Shui Po), and some were random letters. We are testing whether a familiar abbreviation makes a code easier to remember, and whether that depends on whether the abbreviation is familiar <i>to you</i>. If it does, apps could design codes that are easier for their users to remember.</p>
+  <p>Some codes contained a familiar 3-letter abbreviation. Some were global (like KFC or BBC), some were Hong Kong-specific (like TVB, a local TV station, or SSP, Sham Shui Po), and some were random letters. We are testing whether a familiar abbreviation makes a code easier to remember, and whether that depends on whether the abbreviation is familiar <i>to you</i>. If it does, apps could design codes that are easier for their users to remember.</p>
   <p><b>Please don't tell other students about the abbreviations until the study is finished</b>, as it would change their results.</p>
   <p class="muted">To withdraw your data, email u3645125@connect.hku.hk with this ID: <b>${S.p.pid}</b></p>
   <p id="dl" style="display:none"><button id="dlb" class="ghost">Download data (test mode)</button></p>`;
