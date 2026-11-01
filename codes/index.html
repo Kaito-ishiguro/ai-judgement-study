@@ -33,14 +33,23 @@
   .login .brand { font-weight:700; color:var(--accent); margin-bottom:10px; }
   .login input { font:600 1.4rem ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing:.12em; text-transform:uppercase; }
   .countdown { font-size:2.2rem; font-weight:700; color:var(--accent); }
-  .fam-row { display:grid; grid-template-columns:70px 1fr; gap:10px; align-items:center; margin:8px 0; }
-  .fam-row b { font-family:ui-monospace, Consolas, monospace; font-size:1.1rem; }
+  .fam-sec { margin:20px 0 6px; font-size:1rem; color:var(--accent); border-bottom:1px solid var(--line); padding-bottom:4px; }
+  .fam-row { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
+  .fam-row b { font-family:ui-monospace, Consolas, monospace; font-size:1.1rem; margin-right:8px; }
+  .fam-row .full { color:var(--muted); font-size:.92rem; }
+  /* Know / Don't know: two joined buttons, picking one turns the other off */
+  .seg { display:inline-flex; border:1px solid var(--accent); border-radius:8px; overflow:hidden; white-space:nowrap; }
+  .seg input { position:absolute; opacity:0; pointer-events:none; }
+  .seg label { display:block; margin:0; padding:7px 14px; font-weight:500; font-size:.92rem; color:var(--accent); background:#fff; cursor:pointer; user-select:none; }
+  .seg label + input + label { border-left:1px solid var(--accent); }
+  .seg input:checked + label { background:var(--accent); color:#fff; }
+  .seg input:focus-visible + label { outline:2px solid var(--ink); outline-offset:-3px; }
   .warn { color:#a12a2a; font-weight:600; }
   .fb { font-size:1.8rem; font-weight:700; margin:0; } .fb.ok { color:#2e7d4f; } .fb.no { color:#a12a2a; }
   .pbar { width:260px; height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin:4px 0 12px; }
   .pbar div { height:100%; background:var(--accent); }
   @media (max-width:480px) { main { margin:12px auto; padding:0 8px; } .card { padding:18px 14px; min-height:0; } .phone { width:100%; }
-    .center { justify-content:flex-start; min-height:0; padding-top:8px; } .fam-row { grid-template-columns:56px 1fr; } }
+    .center { justify-content:flex-start; min-height:0; padding-top:8px; } .fam-row { grid-template-columns:1fr; gap:6px; } .seg { justify-self:start; } }
 </style>
 </head>
 <body>
@@ -67,6 +76,11 @@ const MILESTONE_MS = 3000; // progress screen when it shows an encouragement mes
 const GLOBAL = ["KFC","BMW","PDF","GPS","SMS","CNN","MVP"];
 const LOCAL  = ["TVB","MPF","SSP","YMT","TSW","KMB","CWB"];
 const RANDOM = ["DHT","WHD","QDP","QFD","ZRQ","NQJ","XGW"];
+// Full names, shown only on the familiarity page at the end (never during the code task)
+const FULL = { KFC:"Kentucky Fried Chicken", BMW:"Bayerische Motoren Werke (car brand)", PDF:"Portable Document Format",
+  GPS:"Global Positioning System", SMS:"Short Message Service (text message)", CNN:"Cable News Network", MVP:"Most Valuable Player",
+  TVB:"Television Broadcasts Limited (TV station)", MPF:"Mandatory Provident Fund", SSP:"Sham Shui Po",
+  YMT:"Yau Ma Tei", TSW:"Tin Shui Wai", KMB:"Kowloon Motor Bus", CWB:"Causeway Bay" };
 // 3 frame sets (F1-F3) of 7 frames: "first digit|digit after block|last 2 characters"
 const FRAME_SETS = [
   ["5|3|JQ","6|9|P8","5|3|5J","9|4|J6","8|9|6V","5|8|67","8|2|C8"],
@@ -280,12 +294,16 @@ function pagePracticeDone(code, typed){
 }
 
 function pageFamiliarity(){
-  const abbr = shuffle(GLOBAL.concat(LOCAL));
+  // Two sections (order within each is random); every row is a two-button Know / Don't know choice
+  const glob = shuffle(GLOBAL), loc = shuffle(LOCAL), abbr = glob.concat(loc);
+  const row = a => `<div class="fam-row"><div><b>${a}</b><span class="full">${esc(FULL[a])}</span></div>
+      <div class="seg" role="radiogroup" aria-label="${a}">
+        <input type="radio" name="fam_${a}" id="k_${a}" value="KNOW"><label for="k_${a}">Know</label>
+        <input type="radio" name="fam_${a}" id="d_${a}" value="DONT_KNOW"><label for="d_${a}">Don't know</label></div></div>`;
   app.innerHTML = `<h2>Almost done</h2>
-  <p>Do you know these abbreviations? Choose <b>Know</b> if you know what it refers to, even if you don't know what each letter stands for (for example, knowing KFC is a fried-chicken restaurant counts as Know). Please don't look them up.</p>
-  ${abbr.map(a => `<div class="fam-row"><b>${a}</b>
-      <span><label class="inline"><input type="radio" name="fam_${a}" value="KNOW"> Know</label>
-      <label class="inline"><input type="radio" name="fam_${a}" value="DONT_KNOW"> Don't know</label></span></div>`).join("")}
+  <p>Some of the codes contained abbreviations. Did you already know each of these <b>before today</b>? Choose <b>Know</b> if you knew what it refers to, even if you didn't know the full name (for example, knowing KFC is a fried-chicken restaurant counts as Know).</p>
+  <h3 class="fam-sec">Global abbreviations</h3>${glob.map(row).join("")}
+  <h3 class="fam-sec">Hong Kong abbreviations</h3>${loc.map(row).join("")}
   <label>Did you write down or photograph any code during the task?</label>
   <label class="inline"><input type="radio" name="wrote" value="no"> No</label>
   <label class="inline"><input type="radio" name="wrote" value="yes"> Yes (that's OK, please be honest)</label>
@@ -296,6 +314,7 @@ function pageFamiliarity(){
     const pick = a => document.querySelector(`input[name=fam_${a}]:checked`);
     if (!wrote || abbr.some(a => !pick(a))) { document.getElementById("err").textContent = "Please choose Know or Don't know for every row, and answer the last question."; return; }
     abbr.forEach(a => { S.p["fam_"+a] = pick(a).value; });
+    S.p.famcheck_version = "v3 sections + full names";  // not "fam_..." : analysis reads every fam_ column as an abbreviation  // v2 (31 Oct-1 Nov): mixed list, abbreviation only
     S.p.wrote_down = wrote.value;
     finish();
   };
